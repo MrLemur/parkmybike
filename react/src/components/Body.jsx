@@ -86,7 +86,6 @@ const Details = props => {
 
   return (
     <Modal centered show={show} onHide={handleClose}>
-
       <Modal.Body className='bg-light p-0 '>
         <Carousel>
           <Carousel.Item>
@@ -108,9 +107,7 @@ const Details = props => {
         <ListGroup variant='flush'>
           <ListGroup.Item className='p-2'>
             <Button
-              href={`https://www.google.com/maps/dir/?api=1&destination=${
-                details["Coordinates"]
-              }&travelmode=bicycling`}
+              href={`https://www.google.com/maps/dir/?api=1&destination=${details["Coordinates"]}&travelmode=bicycling`}
               variant='success'
               target='_blank'
               block
