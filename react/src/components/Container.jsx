@@ -137,7 +137,7 @@ function Header(props) {
   const [searchButton, setSearchButton] = useState(<SearchButton />);
   const { loading, setLoading } = useContext(LoadingContext);
   const [locationButtonInside, setLocationButtonInside] = useState(
-    "Use my current location"
+    "Use my location"
   );
 
   const handleClose = () => setModal(false);
