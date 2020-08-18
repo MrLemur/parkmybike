@@ -6,7 +6,7 @@ import {
   faGithub,
   faReact
 } from "@fortawesome/free-brands-svg-icons";
-import { faBicycle, faLocationArrow } from "@fortawesome/free-solid-svg-icons";
+import { faLocationArrow } from "@fortawesome/free-solid-svg-icons";
 import MapContext from "./MapContext";
 import ModalContext from "./ModalContext";
 import LoadingContext from "./LoadingContext";
@@ -137,7 +137,7 @@ function Header(props) {
   const [searchButton, setSearchButton] = useState(<SearchButton />);
   const { loading, setLoading } = useContext(LoadingContext);
   const [locationButtonInside, setLocationButtonInside] = useState(
-    "Use my current location"
+    "Use my location"
   );
 
   const handleClose = () => setModal(false);
@@ -214,7 +214,12 @@ function Header(props) {
     <Container className='h-100  d-flex flex-column px-0' fluid='True'>
       <Navbar bg='primary' variant='dark' expand='lg'>
         <Navbar.Brand>
-          <img src='/logo192.png' style={{ width: "40px" }} className='pr-2' />
+          <img
+            alt='Logo'
+            src='/logo192.png'
+            style={{ width: "40px" }}
+            className='pr-2'
+          />
           Park My Bike
         </Navbar.Brand>
         <Navbar.Toggle aria-controls='basic-navbar-nav' />
