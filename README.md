@@ -2,7 +2,7 @@
 
 ![Logo](react/public/logo192.png)
 
-Live version: [https://parkmybike.netlify.com/](https://parkmybike.netlify.com/)
+Live version: [https://parkmybike.netlify.app/](https://parkmybike.netlify.app/)
 
 This repository contains both the frontend app written in React, as well as the Flask backend used for calculating and generating the maps.
 
