@@ -12,22 +12,21 @@ This is still a work in progress and should be thought of as such.
 
 ### React
 
-The frontend is written in React, using the `create-react-app` bootstrap to provide the PWA functionality. It can be run by using the normal `yarn start` and `yarn build` commands (or your chosen dependency manager).
+The frontend is written in React and now renders the Leaflet map directly in the browser. It consumes the backend's GeoJSON responses and visualises the results with interactive markers.
+
+```bash
+pnpm install
+pnpm start
+pnpm build
+```
+
+Set `VITE_API_BASE` if the backend is hosted on a different origin; by default the frontend talks to the same host/port.
 
 ### Flask
 
-The backend is a simple Python Flask application that provides an API for querying the cycle parking dataset. It returns a Google Map page with the required markers to enable the React app to function.
+The Flask backend provides search and detail endpoints over the TfL dataset. The `/api/v1.0/parking/search` route returns structured GeoJSON (center, bounds, origin, and parking feature markers). The frontend uses this payload to render the map.
 
-> The marker icon images are currently hard linked to my PythonAnywhere project, so will need updated on the relevant lines.
-
-It uses a `config.ini` file in the `flask` directory to provide the Google Maps API key. In order for this to run successfully, create a `config.ini` file in the `flask` directory in the following format:
-
-```ini
-[DEFAULT]
-api_key = x87gf8fgukyevfuovefyfvuo4vf4f
-```
-
-Path names to images and the dataset will need to be changed if using a production server to publish the application, such as WSGI.
+Path names to images and the dataset will still need to be adjusted if deploying beyond the default development setup.
 
 ## Dataset
 

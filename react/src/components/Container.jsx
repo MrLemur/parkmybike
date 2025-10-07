@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from "react";
+import React, { useState, useContext, useEffect, useCallback } from "react";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -10,6 +10,10 @@ import { faLocationArrow } from "@fortawesome/free-solid-svg-icons";
 import MapContext from "./MapContext";
 import ModalContext from "./ModalContext";
 import LoadingContext from "./LoadingContext";
+import {
+  searchParkingByQuery,
+  searchParkingByCoordinates
+} from "../lib/api";
 import {
   Navbar,
   Container,
@@ -23,12 +27,6 @@ import {
   Col,
   Fade
 } from "react-bootstrap";
-
-async function fetchData(uri) {
-  const data = await fetch(uri);
-  let json = await data.json();
-  return json;
-}
 
 const getLocation = props => {
   return new Promise((res, rej) => {
@@ -81,7 +79,7 @@ const SearchAreaButton = props => {
     <Fade in={isVisible} timeout={1000}>
       <div
         className='w-100 position-absolute justify-content-center'
-        style={{ bottom: 0, pointerEvents: "none" }}
+        style={{ bottom: 0, pointerEvents: "none", zIndex: 1000 }}
       >
         <Button
           variant='info'
@@ -129,10 +127,10 @@ const AboutBody = () => (
 function Header(props) {
   const { modal, setModal } = useContext(ModalContext);
   const { children } = props;
-  const { setMap } = useContext(MapContext);
+  const { mapData, setMapData, setSelectedParkingId } = useContext(MapContext);
   const [query, setQuery] = useState("");
-  const [centrePoint, setCentrePoint] = useState([]);
-  const [completedQuery, setCompletedQuery] = useState("");
+  const [pendingCenter, setPendingCenter] = useState(null);
+  const [searchRequest, setSearchRequest] = useState(null);
   const [showSearchAreaButton, setShowSearchAreaButton] = useState(false);
   const [searchButton, setSearchButton] = useState(<SearchButton />);
   const { loading, setLoading } = useContext(LoadingContext);
@@ -140,78 +138,138 @@ function Header(props) {
     "Use my location"
   );
 
-  const handleClose = () => setModal(false);
-
-  useEffect(() => {
-    const handleSearchMapArea = location => {
-      if (
-        (typeof location.data[0] === "string" ||
-          location.data[0] instanceof String) &&
-        location.data[0] === "map_moved"
-      ) {
-        setShowSearchAreaButton(true);
-        setCentrePoint([location.data[1][0], location.data[1][1]]);
-      }
-    };
-    window.addEventListener("message", handleSearchMapArea);
-  }, [setCentrePoint]);
-
-  useEffect(() => {
-    if (completedQuery.length > 0) {
-      setLoading(true);
-      setSearchButton(
-        <Button variant='warning' disabled>
-          <Spinner
-            as='span'
-            animation='border'
-            size='sm'
-            role='status'
-            aria-hidden='true'
-            className='mr-1'
-          />
-          Searching
-        </Button>
-      );
-      let uri = `https://mrlemur.eu.pythonanywhere.com/api/v1.0/parking/search/${completedQuery}`;
-      fetchData(uri)
-        .then(data => {
-          if (!data.error) {
-            setMap(`data:text/html;base64,${data.base64}`);
-            setSearchButton(<SearchButton />);
-            setLoading(false);
-          } else {
-            setSearchButton(<SearchButton />);
-            setLoading(false);
-            setModal({
-              title: "No bike parks found",
-              body: `Could not find any bike parks near: ${completedQuery}`,
-              show: true,
-              className: "bg-danger text-white"
-            });
-          }
-        })
-        .catch(e => {
-          setSearchButton(<SearchButton />);
-          setLoading(false);
-          setModal({
-            title: "No bike parks found",
-            body: `Could not find any bike parks near: ${completedQuery}`,
-            show: true,
-            className: "bg-danger text-white"
-          });
-        });
-      setCompletedQuery("");
-    }
-    return () => {};
-  }, [completedQuery, setMap, setModal, setLoading]);
+  const handleClose = () =>
+    setModal(current => ({ ...(current || {}), show: false }));
 
   const handleSubmit = event => {
     event.preventDefault();
-    setCompletedQuery(query + ", London, UK");
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return;
+    }
+    setSearchRequest({ type: "query", value: `${trimmed}, London, UK` });
   };
 
+  const handleMapMoved = useCallback(
+    center => {
+      if (!Array.isArray(center) || center.length !== 2) {
+        return;
+      }
+
+      const [lat, lon] = center;
+      const currentCenter = mapData?.properties?.center;
+      const delta = currentCenter
+        ? Math.sqrt(
+            (lat - Number(currentCenter.lat || 0)) ** 2 +
+              (lon - Number(currentCenter.lon || 0)) ** 2
+          )
+        : Number.POSITIVE_INFINITY;
+
+      // Roughly > 50 metres
+      if (delta < 0.0005) {
+        return;
+      }
+
+      setPendingCenter({ lat, lon });
+      setShowSearchAreaButton(true);
+    },
+    [mapData]
+  );
+
+  const enhancedChildren = React.Children.map(children, child =>
+    React.isValidElement(child)
+      ? React.cloneElement(child, { onMapMoved: handleMapMoved })
+      : child
+  );
+
+  useEffect(() => {
+    if (!searchRequest) {
+      return;
+    }
+
+    let isCancelled = false;
+    const label =
+      searchRequest.type === "coordinates"
+        ? `${Number(searchRequest.value.lat).toFixed(4)}, ${Number(
+            searchRequest.value.lon
+          ).toFixed(4)}`
+        : searchRequest.value;
+
+    const spinner = (
+      <Button variant='warning' disabled>
+        <Spinner
+          as='span'
+          animation='border'
+          size='sm'
+          role='status'
+          aria-hidden='true'
+          className='mr-1'
+        />
+        Searching
+      </Button>
+    );
+
+    const runSearch = async () => {
+      setLoading(true);
+      setSearchButton(spinner);
+      try {
+        let data;
+        if (searchRequest.type === "query") {
+          data = await searchParkingByQuery(searchRequest.value);
+        } else if (searchRequest.type === "coordinates") {
+          data = await searchParkingByCoordinates(
+            searchRequest.value.lat,
+            searchRequest.value.lon
+          );
+        } else {
+          throw new Error("Unsupported search request");
+        }
+
+        if (!data || data.error) {
+          throw new Error(
+            data?.error || `Could not find any bike parks near: ${label}`
+          );
+        }
+
+        if (!isCancelled) {
+          setMapData(data);
+          setSelectedParkingId(null);
+          setShowSearchAreaButton(false);
+          setPendingCenter(null);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setModal({
+            title: "No bike parks found",
+            body: error.message || `Could not find any bike parks near: ${label}`,
+            show: true,
+            className: "bg-danger text-white"
+          });
+        }
+      } finally {
+        if (!isCancelled) {
+          setSearchButton(<SearchButton />);
+          setLoading(false);
+          setSearchRequest(null);
+        }
+      }
+    };
+
+    runSearch();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    searchRequest,
+    setLoading,
+    setMapData,
+    setModal,
+    setSelectedParkingId
+  ]);
+
   return (
-    <Container className='h-100  d-flex flex-column px-0' fluid='True'>
+    <Container className='h-100 d-flex flex-column px-0 position-relative' fluid>
       <Navbar bg='primary' variant='dark' expand='lg'>
         <Navbar.Brand>
           <img
@@ -251,9 +309,14 @@ function Header(props) {
               getLocation()
                 .then(e => {
                   const coords = e.coords;
-                  setCompletedQuery(`${coords.latitude},${coords.longitude}`);
+                  setSearchRequest({
+                    type: "coordinates",
+                    value: {
+                      lat: coords.latitude,
+                      lon: coords.longitude
+                    }
+                  });
                   setLocationButtonInside("Use my location");
-                  setLoading(false);
                 })
                 .catch(e => {
                   console.log(e);
@@ -273,27 +336,26 @@ function Header(props) {
             {locationButtonInside}
           </Button>
         </Navbar.Text>
-        <Form inline onSubmit={handleSubmit}>
-          <Form.Row>
-            <Col>
-              <FormControl
-                type='text'
-                placeholder='Enter address'
-                id='query'
-                className='mr-sm-0'
-                onChange={e => setQuery(e.target.value)}
-                required
-              />
-            </Col>
-            <Col>{searchButton}</Col>
-          </Form.Row>
+        <Form className="d-flex" onSubmit={handleSubmit}>
+          <FormControl
+            type='text'
+            placeholder='Enter address'
+            id='query'
+            className='me-2'
+            onChange={e => setQuery(e.target.value)}
+            required
+          />
+          {searchButton}
         </Form>
       </Navbar>
-      {children}
+  {enhancedChildren}
       <SearchAreaButton
-        isVisible={showSearchAreaButton}
+        isVisible={showSearchAreaButton && Boolean(pendingCenter)}
         action={() => {
-          setCompletedQuery(centrePoint);
+          if (!pendingCenter) {
+            return;
+          }
+          setSearchRequest({ type: "coordinates", value: pendingCenter });
           setShowSearchAreaButton(false);
         }}
       />
