@@ -8,7 +8,7 @@ license = { file = "../LICENSE.md" }
 requires-python = ">=3.11"
 dependencies = [
   "flask==3.0.3",
-  "flask-cors==4.0.0",
+  "flask-cors==6.0.0",
   "requests==2.32.3"
 ]
 
