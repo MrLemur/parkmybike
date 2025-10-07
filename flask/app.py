@@ -1,19 +1,19 @@
 #!flask/bin/python
-from flask import Flask, make_response, jsonify, abort
+from flask import Flask, make_response, jsonify, abort, request
 from flask_cors import CORS
 from statistics import mean
-from map_plot import GoogleMapPlotter
-import json, base64, configparser
+from map_plot import LeafletMapPlotter
+import json
+from math import radians, sin, cos, sqrt, atan2
+from typing import List, Optional, Sequence, Tuple
 
 app = Flask(__name__)
 CORS(app)
 
-config = configparser.ConfigParser()
-config.read('config.ini')
+Coordinate = Tuple[float, float]
+ParkingRecord = Tuple[float, float, str]
 
-api_key = config['DEFAULT']['api_key']
-
-coordinates = []
+coordinates: List[ParkingRecord] = []
 with open("cycle_parking.json", "r") as json_file:
     data = json.load(json_file)
     for feature in data["features"]:
@@ -21,6 +21,32 @@ with open("cycle_parking.json", "r") as json_file:
             tuple(reversed(feature["geometry"]["coordinates"]))
             + (feature["properties"]["FEATURE_ID"],)
         )
+
+
+def parse_coordinate_pair(value: Optional[str]) -> Optional[Coordinate]:
+    if not value:
+        return None
+    try:
+        lat_str, lon_str = [part.strip() for part in value.split(",", 1)]
+        return float(lat_str), float(lon_str)
+    except (ValueError, AttributeError):
+        return None
+
+
+def geodesic_distance(origin: Coordinate, target: Coordinate) -> float:
+    """Return the distance in metres between two coordinates using Haversine."""
+
+    lat1, lon1 = origin
+    lat2, lon2 = target
+
+    phi1, phi2 = radians(lat1), radians(lat2)
+    d_phi = radians(lat2 - lat1)
+    d_lambda = radians(lon2 - lon1)
+
+    a = sin(d_phi / 2) ** 2 + cos(phi1) * cos(phi2) * sin(d_lambda / 2) ** 2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    earth_radius_m = 6_371_000
+    return earth_radius_m * c
 
 
 @app.route("/")
@@ -132,54 +158,125 @@ def get_centre_position(coordinates):
     return (center_lat, center_long)
 
 
-@app.route("/api/v1.0/parking/search/<location>", methods=["GET"])
-def make_map(location):
-    try:
-        gmap = GoogleMapPlotter(0, 0, 16)
-        gmap.apikey = api_key 
-        chosen_location = gmap.geocode(location)
+def collect_nearby_parks(
+    origin: Coordinate,
+    minimum_results: int = 5,
+    primary_radius: int = 250,
+    secondary_radius: int = 350,
+) -> List[ParkingRecord]:
+    nearby: List[ParkingRecord] = []
+    seen_ids = set()
 
-        nearby_cycle_parks = []
+    def add_park(park: ParkingRecord):
+        if park[2] in seen_ids:
+            return
+        nearby.append(park)
+        seen_ids.add(park[2])
 
+    for park in coordinates:
+        if check_radius(origin, park[:2], primary_radius):
+            add_park(park)
+
+    if len(nearby) < minimum_results:
         for park in coordinates:
-            if check_radius(chosen_location, park[:2]):
-                nearby_cycle_parks.append(park)
-                gmap.marker(
-                    park[0],
-                    park[1],
-                    id=park[2],
-                    img="https://mrlemur.eu.pythonanywhere.com/static/marker_icon.png",
-                )
+            if check_radius(origin, park[:2], secondary_radius):
+                add_park(park)
 
-        if len(nearby_cycle_parks) < 5:
-            for park in coordinates:
-                if check_radius(chosen_location, park[:2], 350):
-                    nearby_cycle_parks.append(park)
-                    gmap.marker(
-                        park[0],
-                        park[1],
-                        id=park[2],
-                        img="https://mrlemur.eu.pythonanywhere.com/static/marker_icon.png",
-                    )
+    return nearby
 
-        if len(nearby_cycle_parks) is 0:
-            return jsonify({"error": "No bike parks found near location"})
 
-        gmap.marker(
-            chosen_location[0],
-            chosen_location[1],
-            img="https://mrlemur.eu.pythonanywhere.com/static/current_location.png",
+def build_map_response(
+    plotter: LeafletMapPlotter,
+    chosen_location: Coordinate,
+    search_descriptor: Optional[dict] = None,
+) -> dict:
+    nearby_cycle_parks = collect_nearby_parks(chosen_location)
+
+    if len(nearby_cycle_parks) == 0:
+        raise ValueError("No bike parks found near location")
+
+    for park in nearby_cycle_parks:
+        distance = geodesic_distance(chosen_location, park[:2])
+        plotter.marker(
+            park[0],
+            park[1],
+            marker_type="parking",
+            id=park[2],
+            properties={"distanceMetres": round(distance, 1)},
         )
 
-        gmap.center = get_centre_position(nearby_cycle_parks)
+    plotter.marker(
+        chosen_location[0],
+        chosen_location[1],
+        marker_type="origin",
+        properties={"label": "Search origin"},
+    )
 
-        lats, lons, id = zip(*nearby_cycle_parks)
+    plotter.center = get_centre_position(nearby_cycle_parks)
 
-        contents = gmap.draw()
-        encoded = base64.b64encode(bytes(contents, "utf-8"))
-        return jsonify({"base64": bytes.decode(encoded)})
-    except Exception as e:
-        return jsonify({"error": "Query submitted was invalid: " + str(e)})
+    feature_collection = plotter.to_feature_collection()
+    feature_collection["properties"]["query"] = search_descriptor or {}
+    return feature_collection
+
+
+def resolve_location(
+    plotter: LeafletMapPlotter,
+    location_string: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+) -> Coordinate:
+    if latitude is not None and longitude is not None:
+        return float(latitude), float(longitude)
+
+    direct_coordinates = parse_coordinate_pair(location_string)
+    if direct_coordinates:
+        return direct_coordinates
+
+    if location_string:
+        return plotter.geocode(location_string)
+
+    raise ValueError("A search query or coordinates must be provided")
+
+
+def build_search_response(
+    location_string: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+) -> dict:
+    plotter = LeafletMapPlotter(0, 0, 16)
+    chosen_location = resolve_location(
+        plotter, location_string=location_string, latitude=latitude, longitude=longitude
+    )
+
+    search_descriptor = {
+        "query": location_string,
+        "coordinates": {"lat": chosen_location[0], "lon": chosen_location[1]},
+    }
+
+    return build_map_response(plotter, chosen_location, search_descriptor)
+
+
+@app.route("/api/v1.0/parking/search", methods=["GET"])
+def search_parking():
+    query = request.args.get("query")
+    lat = request.args.get("lat", type=float)
+    lon = request.args.get("lon", type=float)
+    try:
+        return jsonify(build_search_response(query, lat, lon))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": "Query submitted was invalid: " + str(exc)}), 400
+
+
+@app.route("/api/v1.0/parking/search/<path:location>", methods=["GET"])
+def search_parking_legacy(location):
+    try:
+        return jsonify(build_search_response(location))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": "Query submitted was invalid: " + str(exc)}), 400
 
 
 @app.errorhandler(404)
@@ -188,4 +285,4 @@ def not_found(error):
 
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(port=5000, debug=False)

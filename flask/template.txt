@@ -1,3 +1,4 @@
+<!-- Deprecated: legacy HTML template retained for reference. The backend now returns structured GeoJSON payloads instead. -->
 <html>
   <head>
     <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
@@ -103,152 +104,66 @@
                         }}
                       ]
                     }},
-                    {{
-                      "featureType": "poi.park",
-                      "elementType": "labels.text.fill",
-                      "stylers": [
-                        {{
-                          "color": "#447530"
-                        }}
-                      ]
+                    <!DOCTYPE html>
+                    <html lang="en">
+                      <head>
+                        <meta charset="UTF-8" />
+                        <meta
+                          name="viewport"
+                          content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
+                        />
+                        <title>Park My Bike - London Parking Map</title>
+                        <link
+                          rel="stylesheet"
+                          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+                          integrity="sha512-mTLM6G8z1KjqwZSmFsYFFAh14+b6w6P0L8u11RVlMCM/iNwIVDSY5Pja/qvpDMAYA9YgS1jDuU8R8nR0zs3P8Q=="
+                          crossorigin=""
+                        />
+                        <style>
+                          html,
+                          body {
+                            height: 100%;
+                            margin: 0;
+                          }
+                          #map {
+                            width: 100%;
+                            height: 100%;
+                          }
+                          .leaflet-container a {
+                            color: #0d6efd;
+                          }
+                        </style>
+                      </head>
+                      <body>
+                        <div id="map"></div>
+                        <script
+                          src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+                          integrity="sha512-vAE8xx6H0v4n0oQpU9jwELyNR725LLhcCq114F8CbnMD4PlzyBbs6k8ZZr3Su2MzvulaHYodEcYamI6LG8wYAw=="
+                          crossorigin=""
+                        ></script>
+                        <script>
+                          const map = L.map('map', {{
+                            zoomControl: false,
+                            attributionControl: true
+                          }}).setView([{lat}, {long}], {zoom});
+
+                          L.control.zoom({{ position: 'bottomright' }}).addTo(map);
+
+                          L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+                            maxZoom: 19,
+                            attribution:
+                              '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                          }}).addTo(map);
+
+                          map.on('moveend', function () {{
+                            const center = map.getCenter();
+                            window.setTimeout(function () {{
+                              window.parent.postMessage(['map_moved', [center.lat, center.lng]], '*');
+                            }}, 500);
+                          }});
+
+                          {markers}
+                        </script>
+                      </body>
+                    </html>
                     }},
-                    {{
-                      "featureType": "road",
-                      "elementType": "geometry",
-                      "stylers": [
-                        {{
-                          "color": "#f5f1e6"
-                        }}
-                      ]
-                    }},
-                    {{
-                      "featureType": "road.arterial",
-                      "elementType": "geometry",
-                      "stylers": [
-                        {{
-                          "color": "#fdfcf8"
-                        }}
-                      ]
-                    }},
-                    {{
-                      "featureType": "road.highway",
-                      "elementType": "geometry",
-                      "stylers": [
-                        {{
-                          "color": "#f8c967"
-                        }}
-                      ]
-                    }},
-                    {{
-                      "featureType": "road.highway",
-                      "elementType": "geometry.stroke",
-                      "stylers": [
-                        {{
-                          "color": "#e9bc62"
-                        }}
-                      ]
-                    }},
-                    {{
-                      "featureType": "road.highway.controlled_access",
-                      "elementType": "geometry",
-                      "stylers": [
-                        {{
-                          "color": "#e98d58"
-                        }}
-                      ]
-                    }},
-                    {{
-                      "featureType": "road.highway.controlled_access",
-                      "elementType": "geometry.stroke",
-                      "stylers": [
-                        {{
-                          "color": "#db8555"
-                        }}
-                      ]
-                    }},
-                    {{
-                      "featureType": "road.local",
-                      "elementType": "labels.text.fill",
-                      "stylers": [
-                        {{
-                          "color": "#806b63"
-                        }}
-                      ]
-                    }},
-                    {{
-                      "featureType": "transit.line",
-                      "elementType": "geometry",
-                      "stylers": [
-                        {{
-                          "color": "#dfd2ae"
-                        }}
-                      ]
-                    }},
-                    {{
-                      "featureType": "transit.line",
-                      "elementType": "labels.text.fill",
-                      "stylers": [
-                        {{
-                          "color": "#8f7d77"
-                        }}
-                      ]
-                    }},
-                    {{
-                      "featureType": "transit.line",
-                      "elementType": "labels.text.stroke",
-                      "stylers": [
-                        {{
-                          "color": "#ebe3cd"
-                        }}
-                      ]
-                    }},
-                    {{
-                      "featureType": "transit.station",
-                      "elementType": "geometry",
-                      "stylers": [
-                        {{
-                          "color": "#dfd2ae"
-                        }}
-                      ]
-                    }},
-                    {{
-                      "featureType": "water",
-                      "elementType": "geometry.fill",
-                      "stylers": [
-                        {{
-                          "color": "#b9d3c2"
-                        }}
-                      ]
-                    }},
-                    {{
-                      "featureType": "water",
-                      "elementType": "labels.text.fill",
-                      "stylers": [
-                        {{
-                          "color": "#92998d"
-                        }}
-                      ]
-                    }}
-                  ],
-          mapTypeId: google.maps.MapTypeId.ROADMAP
-        }};
-        var map = new google.maps.Map(
-          document.getElementById("map_canvas"),
-          myOptions
-        );
-        map.addListener("dragend", function() {{
-          window.setTimeout(() => {{
-            window.parent.postMessage(
-              ["map_moved", [map.getCenter().lat(), map.getCenter().lng()]],
-              "*"
-            );
-          }}, 1000);
-        }});
-        {markers}
-      }}
-    </script>
-  </head>
-  <body style="margin:0px; padding:0px;" onload="initialize()">
-    <div id="map_canvas" style="width: 100%; height: 100%;"></div>
-  </body>
-</html>

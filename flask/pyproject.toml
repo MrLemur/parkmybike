@@ -1,0 +1,26 @@
+[project]
+name = "parkmybike-backend"
+version = "0.1.0"
+description = "Flask API for the Park My Bike application"
+readme = "../README.md"
+authors = ["Park My Bike Contributors <maintainers@parkmybike.invalid>"]
+license = { file = "../LICENSE.md" }
+requires-python = ">=3.11"
+dependencies = [
+  "flask==3.0.3",
+  "flask-cors==4.0.0",
+  "requests==2.32.3"
+]
+
+[project.optional-dependencies]
+dev = [
+  "black==24.8.0"
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+index-url = "https://pypi.org/simple"
+
